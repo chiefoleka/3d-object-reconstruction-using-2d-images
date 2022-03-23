@@ -48,6 +48,8 @@ def train_net(cfg):
         utils.data_transforms.ToTensor(),
     ])
 
+    print(cfg.DATASET.TRAIN_DATASET)
+
     # Set up data loader
     train_dataset_loader = utils.data_loaders.DATASET_LOADER_MAPPING[cfg.DATASET.TRAIN_DATASET](cfg)
     val_dataset_loader = utils.data_loaders.DATASET_LOADER_MAPPING[cfg.DATASET.TEST_DATASET](cfg)

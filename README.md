@@ -1,26 +1,11 @@
-# Pix2Vox
-
-[![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/hzxie/Pix2Vox.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/hzxie/Pix2Vox/context:python)
-[![Total alerts](https://img.shields.io/lgtm/alerts/g/hzxie/Pix2Vox.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/hzxie/Pix2Vox/alerts/)
+# 3D Object Reconstruction from 2D images
 
 This repository contains the source code for the paper [Pix2Vox: Context-aware 3D Reconstruction from Single and Multi-view Images](https://arxiv.org/abs/1901.11153). The follow-up work [Pix2Vox++: Multi-scale Context-aware 3D Object Reconstruction from Single and Multiple Images](https://arxiv.org/abs/2006.12250) has been published in *International Journal of Computer Vision (IJCV)*.
 
 ![Overview](https://infinitescript.com/wordpress/wp-content/uploads/2019/04/Pix2Vox-Overview.jpg)
 
-## Cite this work
+> This project is an extension on the [original work](https://github.com/hzxie/Pix2Vox.git) by [Haozhe Xie](https://github.com/hzxie) exploring improvements to the algorithm to generate better optimized 3D images.
 
-```
-@inproceedings{xie2019pix2vox,
-  title={Pix2Vox: Context-aware 3D Reconstruction from Single and Multi-view Images},
-  author={Xie, Haozhe and 
-          Yao, Hongxun and 
-          Sun, Xiaoshuai and 
-          Zhou, Shangchen and 
-          Zhang, Shengping},
-  booktitle={ICCV},
-  year={2019}
-}
-```
 
 ## Datasets
 
@@ -30,25 +15,25 @@ We use the [ShapeNet](https://www.shapenet.org/) and [Pix3D](http://pix3d.csail.
 - ShapeNet voxelized models: http://cvgl.stanford.edu/data2/ShapeNetVox32.tgz
 - Pix3D images & voxelized models: http://pix3d.csail.mit.edu/data/pix3d.zip
 
-## Pretrained Models
+<!-- ## Pretrained Models
 
 The pretrained models on ShapeNet are available as follows:
 
 - [Pix2Vox-A](https://gateway.infinitescript.com/?fileName=Pix2Vox-A-ShapeNet.pth) (457.0 MB)
-- [Pix2Vox-F](https://gateway.infinitescript.com/?fileName=Pix2Vox-F-ShapeNet.pth) (29.8 MB)
+- [Pix2Vox-F](https://gateway.infinitescript.com/?fileName=Pix2Vox-F-ShapeNet.pth) (29.8 MB) -->
 
 ## Prerequisites
 
 #### Clone the Code Repository
 
 ```
-git clone https://github.com/hzxie/Pix2Vox.git
+git clone https://github.com/chiefoleka/3d-object-reconstruction-using-2d-images 3d-reconstruction
 ```
 
 #### Install Python Denpendencies
 
 ```
-cd Pix2Vox
+cd 3d-reconstruction
 pip install -r requirements.txt
 ```
 
@@ -69,22 +54,16 @@ __C.DATASETS.PIX3D.VOXEL_PATH               = '/path/to/Datasets/Pix3D/model/%s/
 
 ## Get Started
 
-To train Pix2Vox, you can simply use the following command:
+To train the model, you can simply use the following command:
 
 ```
 python3 runner.py
 ```
 
-To test Pix2Vox, you can use the following command:
+To test model, you can use the following command:
 
 ```
 python3 runner.py --test --weights=/path/to/pretrained/model.pth
-```
-
-If you want to train/test Pix2Vox-F, you need to checkout to `Pix2Vox-F` branch first.
-
-```
-git checkout -b Pix2Vox-F origin/Pix2Vox-F
 ```
 
 ## License
