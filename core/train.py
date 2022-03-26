@@ -156,7 +156,8 @@ def train_net(cfg):
               (dt.now(), init_epoch, best_iou, best_epoch))
 
     # Summary writer for TensorBoard
-    output_dir = os.path.join(cfg.DIR.OUT_PATH, '%s', dt.now().isoformat())
+    safe_date = (dt.now().isoformat()).translate({ord(c): None for c in '!/\*?"<>|:@#$'})
+    output_dir = os.path.join(cfg.DIR.OUT_PATH, '%s', safe_date)
     log_dir = output_dir % 'logs'
     ckpt_dir = output_dir % 'checkpoints'
     train_writer = SummaryWriter(os.path.join(log_dir, 'train'))
