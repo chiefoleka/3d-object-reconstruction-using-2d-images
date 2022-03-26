@@ -137,6 +137,13 @@ class ShapeNetDataLoader:
             # Get file list of rendering images
             img_file_path = self.rendering_image_path_template % (taxonomy_folder_name, sample_name, 0)
             img_folder = os.path.dirname(img_file_path)
+
+            # This can be missing because Windows is bad at unpacking files
+            if not os.path.exists(img_folder):
+                print('[WARN] %s Ignore ShapeRenderingFile %s/%s since volume file not exists.' %
+                    (dt.now(), img_folder, img_file_path))
+                continue
+
             total_views = len(os.listdir(img_folder))
             rendering_image_indexes = range(total_views)
             rendering_images_file_path = []
