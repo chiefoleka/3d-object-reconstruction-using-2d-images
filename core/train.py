@@ -21,6 +21,7 @@ from core.test import test_net
 from models.encoder import Encoder
 from models.decoder import Decoder
 from models.merger import Merger
+from models.gan import Discriminator, Generator
 
 
 def train_net(cfg):
@@ -67,7 +68,9 @@ def train_net(cfg):
     # Set up networks
     encoder = Encoder(cfg)
     decoder = Decoder(cfg)
-    merger = Merger(cfg)
+    generator = Generator(cfg)
+    discriminator = Discriminator(cfg)
+
     print('[DEBUG] %s Parameters in Encoder: %d.' % (dt.now(), utils.network_utils.count_parameters(encoder)))
     print('[DEBUG] %s Parameters in Decoder: %d.' % (dt.now(), utils.network_utils.count_parameters(decoder)))
     print('[DEBUG] %s Parameters in Merger: %d.' % (dt.now(), utils.network_utils.count_parameters(merger)))
@@ -75,7 +78,8 @@ def train_net(cfg):
     # Initialize weights of networks
     encoder.apply(utils.network_utils.init_weights)
     decoder.apply(utils.network_utils.init_weights)
-    merger.apply(utils.network_utils.init_weights)
+    generator.apply(utils.network_utils.init_weights)
+    discriminator.apply(utils.network_utils.init_weights)
 
     # Set up solver
     if cfg.TRAIN.POLICY == 'adam':
@@ -85,7 +89,8 @@ def train_net(cfg):
         decoder_solver = torch.optim.Adam(decoder.parameters(),
                                           lr=cfg.TRAIN.DECODER_LEARNING_RATE,
                                           betas=cfg.TRAIN.BETAS)
-        merger_solver = torch.optim.Adam(merger.parameters(), lr=cfg.TRAIN.MERGER_LEARNING_RATE, betas=cfg.TRAIN.BETAS)
+        generator_solver = torch.optim.Adam(generator.parameters(), lr=cfg.TRAIN.MERGER_LEARNING_RATE, betas=cfg.TRAIN.BETAS)
+        discriminator_solver = torch.optim.Adam(discriminator.parameters(), lr=cfg.TRAIN.MERGER_LEARNING_RATE, betas=cfg.TRAIN.BETAS)
     elif cfg.TRAIN.POLICY == 'sgd':
         encoder_solver = torch.optim.SGD(filter(lambda p: p.requires_grad, encoder.parameters()),
                                          lr=cfg.TRAIN.ENCODER_LEARNING_RATE,
@@ -93,7 +98,10 @@ def train_net(cfg):
         decoder_solver = torch.optim.SGD(decoder.parameters(),
                                          lr=cfg.TRAIN.DECODER_LEARNING_RATE,
                                          momentum=cfg.TRAIN.MOMENTUM)
-        merger_solver = torch.optim.SGD(merger.parameters(),
+        generator_solver = torch.optim.SGD(generator.parameters(),
+                                        lr=cfg.TRAIN.MERGER_LEARNING_RATE,
+                                        momentum=cfg.TRAIN.MOMENTUM)
+        discriminator_solver = torch.optim.SGD(discriminator.parameters(),
                                         lr=cfg.TRAIN.MERGER_LEARNING_RATE,
                                         momentum=cfg.TRAIN.MOMENTUM)
     else:
@@ -106,14 +114,19 @@ def train_net(cfg):
     decoder_lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(decoder_solver,
                                                                 milestones=cfg.TRAIN.DECODER_LR_MILESTONES,
                                                                 gamma=cfg.TRAIN.GAMMA)
-    merger_lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(merger_solver,
+    generator_lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(generator_solver,
                                                                milestones=cfg.TRAIN.MERGER_LR_MILESTONES,
                                                                gamma=cfg.TRAIN.GAMMA)
+    discriminator_lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(discriminator_solver,
+                                                               milestones=cfg.TRAIN.MERGER_LR_MILESTONES,
+                                                               gamma=cfg.TRAIN.GAMMA)
+
 
     if torch.cuda.is_available():
         encoder = torch.nn.DataParallel(encoder).cuda()
         decoder = torch.nn.DataParallel(decoder).cuda()
-        merger = torch.nn.DataParallel(merger).cuda()
+        generator = torch.nn.DataParallel(generator).cuda()
+        discriminator = torch.nn.DataParallel(discriminator).cuda()
 
     # Set up loss functions
     bce_loss = torch.nn.BCELoss()
@@ -131,8 +144,9 @@ def train_net(cfg):
 
         encoder.load_state_dict(checkpoint['encoder_state_dict'])
         decoder.load_state_dict(checkpoint['decoder_state_dict'])
-        if cfg.NETWORK.USE_MERGER:
-            merger.load_state_dict(checkpoint['merger_state_dict'])
+        generator.load_state_dict(checkpoint['generator_state_dict'])
+        discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
+    
 
         print('[INFO] %s Recover complete. Current epoch #%d, Best IoU = %.4f at epoch #%d.' %
               (dt.now(), init_epoch, best_iou, best_epoch))
@@ -157,7 +171,8 @@ def train_net(cfg):
         # switch models to training mode
         encoder.train()
         decoder.train()
-        merger.train()
+        generator.train()
+        discriminator.train()
 
         batch_end_time = time()
         n_batches = len(train_data_loader)
@@ -174,23 +189,26 @@ def train_net(cfg):
             image_features = encoder(rendering_images)
             raw_features, generated_volumes = decoder(image_features)
 
-            if cfg.NETWORK.USE_MERGER and epoch_idx >= cfg.TRAIN.EPOCH_START_USE_MERGER:
-                generated_volumes = merger(raw_features, generated_volumes)
-            else:
-                generated_volumes = torch.mean(generated_volumes, dim=1)
+            # if cfg.NETWORK.USE_MERGER and epoch_idx >= cfg.TRAIN.EPOCH_START_USE_MERGER:
+            fake = generator(raw_features, generated_volumes)
+            generated_volumes = discriminator(fake)
+            # else:
+            #     generated_volumes = torch.mean(generated_volumes, dim=1)
 
             encoder_loss = bce_loss(generated_volumes, ground_truth_volumes) * 10
 
             # Gradient decent
             encoder.zero_grad()
             decoder.zero_grad()
-            merger.zero_grad()
+            generator.zero_grad()
+            discriminator.zero_grad()
 
             encoder_loss.backward()
 
             encoder_solver.step()
             decoder_solver.step()
-            merger_solver.step()
+            generator_solver.step()
+            discriminator_solver.step()
 
             # Append loss to average metrics
             encoder_losses.update(encoder_loss.item())
@@ -211,7 +229,8 @@ def train_net(cfg):
         # Adjust learning rate
         encoder_lr_scheduler.step()
         decoder_lr_scheduler.step()
-        merger_lr_scheduler.step()
+        generator_lr_scheduler.step()
+        discriminator_lr_scheduler.step()
 
         # Tick / tock
         epoch_end_time = time()
@@ -226,7 +245,7 @@ def train_net(cfg):
                   (dt.now(), epoch_idx + 2, cfg.TRAIN.NUM_EPOCHES, n_views_rendering))
 
         # Validate the training models
-        iou = test_net(cfg, epoch_idx + 1, output_dir, val_data_loader, val_writer, encoder, decoder, merger)
+        iou = test_net(cfg, epoch_idx + 1, output_dir, val_data_loader, val_writer, encoder, decoder, generator, discriminator)
 
         # Save weights to file
         if (epoch_idx + 1) % cfg.TRAIN.SAVE_FREQ == 0:
@@ -235,7 +254,7 @@ def train_net(cfg):
 
             utils.network_utils.save_checkpoints(cfg, os.path.join(ckpt_dir, 'ckpt-epoch-%04d.pth' % (epoch_idx + 1)),
                                                  epoch_idx + 1, encoder, encoder_solver, decoder, decoder_solver,
-                                                 merger, merger_solver, best_iou, best_epoch)
+                                                 generator, generator_solver, discriminator, discriminator_solver, best_iou, best_epoch)
         if iou > best_iou:
             if not os.path.exists(ckpt_dir):
                 os.makedirs(ckpt_dir)
@@ -243,8 +262,8 @@ def train_net(cfg):
             best_iou = iou
             best_epoch = epoch_idx + 1
             utils.network_utils.save_checkpoints(cfg, os.path.join(ckpt_dir, 'best-ckpt.pth'), epoch_idx + 1, encoder,
-                                                 encoder_solver, decoder, decoder_solver, merger, merger_solver,
-                                                 best_iou, best_epoch)
+                                                 encoder_solver, decoder, decoder_solver, generator, generator_solver,
+                                                 discriminator, discriminator_solver, best_iou, best_epoch)
 
     # Close SummaryWriter for TensorBoard
     train_writer.close()

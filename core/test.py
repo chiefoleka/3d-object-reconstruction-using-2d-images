@@ -19,6 +19,7 @@ from datetime import datetime as dt
 from models.encoder import Encoder
 from models.decoder import Decoder
 from models.merger import Merger
+from models.gan import Discriminator, Generator
 
 
 def test_net(cfg,
@@ -28,7 +29,8 @@ def test_net(cfg,
              test_writer=None,
              encoder=None,
              decoder=None,
-             merger=None):
+             generator=None,
+             discriminator=None):
     # Enable the inbuilt cudnn auto-tuner to find the best algorithm to use
     torch.backends.cudnn.benchmark = True
 
@@ -62,21 +64,22 @@ def test_net(cfg,
     if decoder is None or encoder is None:
         encoder = Encoder(cfg)
         decoder = Decoder(cfg)
-        merger = Merger(cfg)
+        generator = Generator(cfg)
+        discriminator = Discriminator(cfg)
 
         if torch.cuda.is_available():
             encoder = torch.nn.DataParallel(encoder).cuda()
             decoder = torch.nn.DataParallel(decoder).cuda()
-            merger = torch.nn.DataParallel(merger).cuda()
+            generator = torch.nn.DataParallel(generator).cuda()
+            discriminator = torch.nn.DataParallel(discriminator).cuda()
 
         print('[INFO] %s Loading weights from %s ...' % (dt.now(), cfg.CONST.WEIGHTS))
         checkpoint = torch.load(cfg.CONST.WEIGHTS)
         epoch_idx = checkpoint['epoch_idx']
         encoder.load_state_dict(checkpoint['encoder_state_dict'])
         decoder.load_state_dict(checkpoint['decoder_state_dict'])
-
-        if cfg.NETWORK.USE_MERGER:
-            merger.load_state_dict(checkpoint['merger_state_dict'])
+        generator.load_state_dict(checkpoint['generator_state_dict'])
+        discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
 
     # Set up loss functions
     bce_loss = torch.nn.BCELoss()
@@ -89,7 +92,8 @@ def test_net(cfg,
     # Switch models to evaluation mode
     encoder.eval()
     decoder.eval()
-    merger.eval()
+    generator.eval()
+    discriminator.eval()
 
     for sample_idx, (taxonomy_id, sample_name, rendering_images, ground_truth_volume) in enumerate(test_data_loader):
         taxonomy_id = taxonomy_id[0] if isinstance(taxonomy_id[0], str) else taxonomy_id[0].item()
@@ -100,14 +104,16 @@ def test_net(cfg,
             rendering_images = utils.network_utils.var_or_cuda(rendering_images)
             ground_truth_volume = utils.network_utils.var_or_cuda(ground_truth_volume)
 
-            # Test the encoder, decoder and merger
+            # Test the encoder, decoder, generator and discriminator
             image_features = encoder(rendering_images)
             raw_features, generated_volume = decoder(image_features)
 
-            if cfg.NETWORK.USE_MERGER and epoch_idx >= cfg.TRAIN.EPOCH_START_USE_MERGER:
-                generated_volume = merger(raw_features, generated_volume)
-            else:
-                generated_volume = torch.mean(generated_volume, dim=1)
+            # if cfg.NETWORK.USE_MERGER and epoch_idx >= cfg.TRAIN.EPOCH_START_USE_MERGER:
+            #     generated_volume = merger(raw_features, generated_volume)
+            # else:
+            #     generated_volume = torch.mean(generated_volume, dim=1)
+
+            generated_volume = generator(raw_features, generated_volume)
 
             encoder_loss = bce_loss(generated_volume, ground_truth_volume) * 10
 
@@ -134,12 +140,14 @@ def test_net(cfg,
                 # Volume Visualization
                 gv = generated_volume.cpu().numpy()
                 rendering_views = utils.binvox_visualization.get_volume_views(gv, os.path.join(img_dir, 'test'),
-                                                                              epoch_idx)
-                test_writer.add_image('Test Sample#%02d/Volume Reconstructed' % sample_idx, rendering_views, epoch_idx)
+                                                                    epoch_idx)
+                utils.network_utils.save_image_voxels(gv, os.path.join(img_dir, 'test'), epoch_idx)
+                # test_writer.add_image('Test Sample#%02d/Volume Reconstructed' % sample_idx, rendering_views, epoch_idx)
                 gtv = ground_truth_volume.cpu().numpy()
                 rendering_views = utils.binvox_visualization.get_volume_views(gtv, os.path.join(img_dir, 'test'),
                                                                               epoch_idx)
-                test_writer.add_image('Test Sample#%02d/Volume GroundTruth' % sample_idx, rendering_views, epoch_idx)
+                utils.network_utils.save_image_voxels(gtv, os.path.join(img_dir, 'test'), epoch_idx)
+                # test_writer.add_image('Test Sample#%02d/Volume GroundTruth' % sample_idx, rendering_views, epoch_idx)
 
             # Print sample loss and IoU
             print('[INFO] %s Test[%d/%d] Taxonomy = %s Sample = %s EDLoss = %.4f IoU = %s' %
