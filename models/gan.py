@@ -71,13 +71,13 @@ class Discriminator(torch.nn.Module):
 
         # Layer Definition
         self.layer1 = torch.nn.Sequential(
-            torch.nn.Conv3d(1, 32, kernel_size=4, stride=2, padding=1),
+            torch.nn.Conv3d(1, 32, kernel_size=4, stride=2, padding=2),
             torch.nn.BatchNorm3d(32),
             torch.nn.LeakyReLU(cfg.NETWORK.LEAKY_VALUE)
         )
         self.layer2 = torch.nn.Sequential(
-            torch.nn.Conv3d(32, 64, kernel_size=4, stride=2, padding=1),
-            torch.nn.BatchNorm3d(128),
+            torch.nn.Conv3d(32, 64, kernel_size=4, stride=2, padding=2),
+            torch.nn.BatchNorm3d(64),
             torch.nn.LeakyReLU(cfg.NETWORK.LEAKY_VALUE)
         )
         self.layer3 = torch.nn.Sequential(
@@ -86,20 +86,20 @@ class Discriminator(torch.nn.Module):
             torch.nn.LeakyReLU(cfg.NETWORK.LEAKY_VALUE)
         )
         self.layer4 = torch.nn.Sequential(
-            torch.nn.Conv3d(128, 256, kernel_size=4, stride=2, padding=1),
+            torch.nn.Conv3d(128, 64, kernel_size=4, stride=2, padding=1),
             torch.nn.BatchNorm3d(256),
             torch.nn.LeakyReLU(cfg.NETWORK.LEAKY_VALUE)
         )
         self.layer5 = torch.nn.Sequential(
-            torch.nn.Conv3d(256, 1, kernel_size=4, stride=2, padding=1),
+            torch.nn.Conv3d(64, 1, kernel_size=4, stride=2, padding=1),
             torch.nn.Sigmoid()
         )
 
     def forward(self, x):
-        out = x.view(-1, 1, 256, 256, 256)
-        #print(out.size()) # torch.Size([100, 1, 64, 64, 64])
+        out = x.view(-1, 1, 128, 128, 128)
+        print(out.size()) # torch.Size([1, 1, 128, 128, 128])
         out = self.layer1(out)
-        #print(out.size())  # torch.Size([100, 64, 32, 32, 32])
+        print(out.size())  # torch.Size([1, 32, 64, 64, 64])
         out = self.layer2(out)
         #print(out.size())  # torch.Size([100, 128, 16, 16, 16])
         out = self.layer3(out)
@@ -109,4 +109,5 @@ class Discriminator(torch.nn.Module):
         out = self.layer5(out)
         #print(out.size())  # torch.Size([100, 200, 1, 1, 1])
 
+        out = out.view((-1, self.cfg.CONST.N_VOX, self.cfg.CONST.N_VOX, self.cfg.CONST.N_VOX))
         return out

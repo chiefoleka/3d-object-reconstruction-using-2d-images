@@ -130,8 +130,8 @@ class ShapeNetDataLoader:
             # Get file path of volumes
             volume_file_path = self.volume_path_template % (taxonomy_folder_name, sample_name)
             if not os.path.exists(volume_file_path):
-                print('[WARN] %s Ignore sample %s/%s since volume file not exists.' %
-                      (dt.now(), taxonomy_folder_name, sample_name))
+                # print('[WARN] %s Ignore sample %s/%s since volume file not exists.' %
+                #       (dt.now(), taxonomy_folder_name, sample_name))
                 continue
 
             # Get file list of rendering images

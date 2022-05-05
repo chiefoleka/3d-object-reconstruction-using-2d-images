@@ -73,7 +73,8 @@ def train_net(cfg):
 
     print('[DEBUG] %s Parameters in Encoder: %d.' % (dt.now(), utils.network_utils.count_parameters(encoder)))
     print('[DEBUG] %s Parameters in Decoder: %d.' % (dt.now(), utils.network_utils.count_parameters(decoder)))
-    print('[DEBUG] %s Parameters in Merger: %d.' % (dt.now(), utils.network_utils.count_parameters(merger)))
+    print('[DEBUG] %s Parameters in Generator: %d.' % (dt.now(), utils.network_utils.count_parameters(generator)))
+    print('[DEBUG] %s Parameters in Discriminator: %d.' % (dt.now(), utils.network_utils.count_parameters(discriminator)))
 
     # Initialize weights of networks
     encoder.apply(utils.network_utils.init_weights)

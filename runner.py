@@ -62,8 +62,8 @@ def main():
             cfg.TRAIN.RESUME_TRAIN = True
 
     # Print config
-    print('Use config:')
-    pprint(cfg)
+    # print('Use config:')
+    # pprint(cfg)
 
     # Set GPU to use
     if type(cfg.CONST.DEVICE) == str:
