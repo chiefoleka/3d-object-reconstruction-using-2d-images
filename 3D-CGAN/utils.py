@@ -82,3 +82,18 @@ def clear_folder(path):
     if os.path.exists(path):
         shutil.rmtree(path)
     os.mkdir(path)
+
+def save_checkpoints(file_path, epoch_id, generator, optimizerG, discriminator,
+                     optimizerD, best_iou, best_epoch):
+    print('[INFO] %s Saving checkpoint to %s ...' % (dt.now(), file_path))
+    checkpoint = {
+        'epoch_id': epoch_id,
+        'best_iou': best_iou,
+        'best_epoch': best_epoch,
+        'generator_state_dict': generator.state_dict(),
+        'optimizerG_state_dict': optimizerG.state_dict(),
+        'discriminator_state_dict': discriminator.state_dict(),
+        'optimizerD_state_dict': optimizerD.state_dict()
+    }
+
+    torch.save(checkpoint, file_path)
