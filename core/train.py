@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-#
-# Developed by Haozhe Xie <cshzxie@gmail.com>
-
 import os
 import random
 import torch
@@ -21,7 +17,6 @@ from core.test import test_net
 from models.encoder import Encoder
 from models.decoder import Decoder
 from models.refiner import Refiner
-from models.merger import Merger
 
 
 def train_net(cfg):
@@ -48,19 +43,16 @@ def train_net(cfg):
         utils.data_transforms.ToTensor(),
     ])
 
-    print(cfg.DATASET.TRAIN_DATASET)
-
     # Set up data loader
-    train_dataset_loader = utils.data_loaders.DATASET_LOADER_MAPPING[cfg.DATASET.TRAIN_DATASET](cfg)
-    val_dataset_loader = utils.data_loaders.DATASET_LOADER_MAPPING[cfg.DATASET.TEST_DATASET](cfg)
-    train_data_loader = torch.utils.data.DataLoader(dataset=train_dataset_loader.get_dataset(
+    dataset_loader = utils.data_loaders.ShapeNetDataLoader(cfg)
+    train_data_loader = torch.utils.data.DataLoader(dataset=dataset_loader.get_dataset(
         utils.data_loaders.DatasetType.TRAIN, cfg.CONST.N_VIEWS_RENDERING, train_transforms),
                                                     batch_size=cfg.CONST.BATCH_SIZE,
                                                     num_workers=cfg.TRAIN.NUM_WORKER,
                                                     pin_memory=True,
                                                     shuffle=True,
                                                     drop_last=True)
-    val_data_loader = torch.utils.data.DataLoader(dataset=val_dataset_loader.get_dataset(
+    val_data_loader = torch.utils.data.DataLoader(dataset=dataset_loader.get_dataset(
         utils.data_loaders.DatasetType.VAL, cfg.CONST.N_VIEWS_RENDERING, val_transforms),
                                                   batch_size=1,
                                                   num_workers=1,
@@ -71,17 +63,14 @@ def train_net(cfg):
     encoder = Encoder(cfg)
     decoder = Decoder(cfg)
     refiner = Refiner(cfg)
-    merger = Merger(cfg)
     print('[DEBUG] %s Parameters in Encoder: %d.' % (dt.now(), utils.network_utils.count_parameters(encoder)))
     print('[DEBUG] %s Parameters in Decoder: %d.' % (dt.now(), utils.network_utils.count_parameters(decoder)))
     print('[DEBUG] %s Parameters in Refiner: %d.' % (dt.now(), utils.network_utils.count_parameters(refiner)))
-    print('[DEBUG] %s Parameters in Merger: %d.' % (dt.now(), utils.network_utils.count_parameters(merger)))
 
     # Initialize weights of networks
     encoder.apply(utils.network_utils.init_weights)
     decoder.apply(utils.network_utils.init_weights)
     refiner.apply(utils.network_utils.init_weights)
-    merger.apply(utils.network_utils.init_weights)
 
     # Set up solver
     if cfg.TRAIN.POLICY == 'adam':
@@ -94,7 +83,6 @@ def train_net(cfg):
         refiner_solver = torch.optim.Adam(refiner.parameters(),
                                           lr=cfg.TRAIN.REFINER_LEARNING_RATE,
                                           betas=cfg.TRAIN.BETAS)
-        merger_solver = torch.optim.Adam(merger.parameters(), lr=cfg.TRAIN.MERGER_LEARNING_RATE, betas=cfg.TRAIN.BETAS)
     elif cfg.TRAIN.POLICY == 'sgd':
         encoder_solver = torch.optim.SGD(filter(lambda p: p.requires_grad, encoder.parameters()),
                                          lr=cfg.TRAIN.ENCODER_LEARNING_RATE,
@@ -105,9 +93,6 @@ def train_net(cfg):
         refiner_solver = torch.optim.SGD(refiner.parameters(),
                                          lr=cfg.TRAIN.REFINER_LEARNING_RATE,
                                          momentum=cfg.TRAIN.MOMENTUM)
-        merger_solver = torch.optim.SGD(merger.parameters(),
-                                        lr=cfg.TRAIN.MERGER_LEARNING_RATE,
-                                        momentum=cfg.TRAIN.MOMENTUM)
     else:
         raise Exception('[FATAL] %s Unknown optimizer %s.' % (dt.now(), cfg.TRAIN.POLICY))
 
@@ -121,15 +106,11 @@ def train_net(cfg):
     refiner_lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(refiner_solver,
                                                                 milestones=cfg.TRAIN.REFINER_LR_MILESTONES,
                                                                 gamma=cfg.TRAIN.GAMMA)
-    merger_lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(merger_solver,
-                                                               milestones=cfg.TRAIN.MERGER_LR_MILESTONES,
-                                                               gamma=cfg.TRAIN.GAMMA)
 
     if torch.cuda.is_available():
         encoder = torch.nn.DataParallel(encoder).cuda()
         decoder = torch.nn.DataParallel(decoder).cuda()
         refiner = torch.nn.DataParallel(refiner).cuda()
-        merger = torch.nn.DataParallel(merger).cuda()
 
     # Set up loss functions
     bce_loss = torch.nn.BCELoss()
@@ -149,8 +130,6 @@ def train_net(cfg):
         decoder.load_state_dict(checkpoint['decoder_state_dict'])
         if cfg.NETWORK.USE_REFINER:
             refiner.load_state_dict(checkpoint['refiner_state_dict'])
-        if cfg.NETWORK.USE_MERGER:
-            merger.load_state_dict(checkpoint['merger_state_dict'])
 
         print('[INFO] %s Recover complete. Current epoch #%d, Best IoU = %.4f at epoch #%d.' %
               (dt.now(), init_epoch, best_iou, best_epoch))
@@ -177,7 +156,6 @@ def train_net(cfg):
         # switch models to training mode
         encoder.train()
         decoder.train()
-        merger.train()
         refiner.train()
 
         batch_end_time = time()
@@ -191,14 +169,11 @@ def train_net(cfg):
             rendering_images = utils.network_utils.var_or_cuda(rendering_images)
             ground_truth_volumes = utils.network_utils.var_or_cuda(ground_truth_volumes)
 
-            # Train the encoder, decoder, refiner, and merger
+            # Train the encoder, decoder and refiner
             image_features = encoder(rendering_images)
-            raw_features, generated_volumes = decoder(image_features)
+            generated_volumes = decoder(image_features)
 
-            if cfg.NETWORK.USE_MERGER and epoch_idx >= cfg.TRAIN.EPOCH_START_USE_MERGER:
-                generated_volumes = merger(raw_features, generated_volumes)
-            else:
-                generated_volumes = torch.mean(generated_volumes, dim=1)
+            generated_volumes = torch.mean(generated_volumes, dim=1)
             encoder_loss = bce_loss(generated_volumes, ground_truth_volumes) * 10
 
             if cfg.NETWORK.USE_REFINER and epoch_idx >= cfg.TRAIN.EPOCH_START_USE_REFINER:
@@ -211,7 +186,6 @@ def train_net(cfg):
             encoder.zero_grad()
             decoder.zero_grad()
             refiner.zero_grad()
-            merger.zero_grad()
 
             if cfg.NETWORK.USE_REFINER and epoch_idx >= cfg.TRAIN.EPOCH_START_USE_REFINER:
                 encoder_loss.backward(retain_graph=True)
@@ -222,7 +196,6 @@ def train_net(cfg):
             encoder_solver.step()
             decoder_solver.step()
             refiner_solver.step()
-            merger_solver.step()
 
             # Append loss to average metrics
             encoder_losses.update(encoder_loss.item())
@@ -248,7 +221,6 @@ def train_net(cfg):
         encoder_lr_scheduler.step()
         decoder_lr_scheduler.step()
         refiner_lr_scheduler.step()
-        merger_lr_scheduler.step()
 
         # Tick / tock
         epoch_end_time = time()
@@ -264,7 +236,7 @@ def train_net(cfg):
                   (dt.now(), epoch_idx + 2, cfg.TRAIN.NUM_EPOCHES, n_views_rendering))
 
         # Validate the training models
-        iou = test_net(cfg, epoch_idx + 1, output_dir, val_data_loader, val_writer, encoder, decoder, refiner, merger)
+        iou = test_net(cfg, epoch_idx + 1, output_dir, val_data_loader, val_writer, encoder, decoder, refiner)
 
         # Save weights to file
         if (epoch_idx + 1) % cfg.TRAIN.SAVE_FREQ == 0:
@@ -273,7 +245,7 @@ def train_net(cfg):
 
             utils.network_utils.save_checkpoints(cfg, os.path.join(ckpt_dir, 'ckpt-epoch-%04d.pth' % (epoch_idx + 1)),
                                                  epoch_idx + 1, encoder, encoder_solver, decoder, decoder_solver,
-                                                 refiner, refiner_solver, merger, merger_solver, best_iou, best_epoch)
+                                                 refiner, refiner_solver, best_iou, best_epoch)
         if iou > best_iou:
             if not os.path.exists(ckpt_dir):
                 os.makedirs(ckpt_dir)
@@ -282,7 +254,7 @@ def train_net(cfg):
             best_epoch = epoch_idx + 1
             utils.network_utils.save_checkpoints(cfg, os.path.join(ckpt_dir, 'best-ckpt.pth'), epoch_idx + 1, encoder,
                                                  encoder_solver, decoder, decoder_solver, refiner, refiner_solver,
-                                                 merger, merger_solver, best_iou, best_epoch)
+                                                 best_iou, best_epoch)
 
     # Close SummaryWriter for TensorBoard
     train_writer.close()

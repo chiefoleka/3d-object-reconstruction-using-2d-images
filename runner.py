@@ -1,7 +1,4 @@
 #!/usr/bin/python3
-# -*- coding: utf-8 -*-
-#
-# Developed by Haozhe Xie <cshzxie@gmail.com>
 
 import logging
 import matplotlib
@@ -9,7 +6,7 @@ import multiprocessing as mp
 import numpy as np
 import os
 import sys
-# Fix problem: no $DISPLAY environment variable
+
 matplotlib.use('Agg')
 
 from argparse import ArgumentParser
@@ -61,10 +58,6 @@ def main():
         if not args.test:
             cfg.TRAIN.RESUME_TRAIN = True
 
-    # Print config
-    print('Use config:')
-    pprint(cfg)
-
     # Set GPU to use
     if type(cfg.CONST.DEVICE) == str:
         os.environ["CUDA_VISIBLE_DEVICES"] = cfg.CONST.DEVICE
@@ -83,7 +76,7 @@ def main():
 if __name__ == '__main__':
     # Check python version
     if sys.version_info < (3, 0):
-        raise Exception("Please follow the installation instruction on 'https://github.com/hzxie/Pix2Vox'")
+        raise Exception("Please follow the installation instruction on 'chiefoleka/3d-object-reconstruction-using-2d-images.git'")
 
     # Setup logger
     mp.log_to_stderr()

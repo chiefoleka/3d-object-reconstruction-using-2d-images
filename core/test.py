@@ -19,7 +19,6 @@ from datetime import datetime as dt
 from models.encoder import Encoder
 from models.decoder import Decoder
 from models.refiner import Refiner
-from models.merger import Merger
 
 
 def test_net(cfg,
@@ -29,8 +28,7 @@ def test_net(cfg,
              test_writer=None,
              encoder=None,
              decoder=None,
-             refiner=None,
-             merger=None):
+             refiner=None):
     # Enable the inbuilt cudnn auto-tuner to find the best algorithm to use
     torch.backends.cudnn.benchmark = True
 
@@ -52,7 +50,7 @@ def test_net(cfg,
             utils.data_transforms.ToTensor(),
         ])
 
-        dataset_loader = utils.data_loaders.DATASET_LOADER_MAPPING[cfg.DATASET.TEST_DATASET](cfg)
+        dataset_loader = utils.data_loaders.ShapeNetDataLoader(cfg)
         test_data_loader = torch.utils.data.DataLoader(dataset=dataset_loader.get_dataset(
             utils.data_loaders.DatasetType.TEST, cfg.CONST.N_VIEWS_RENDERING, test_transforms),
                                                        batch_size=1,
@@ -65,13 +63,11 @@ def test_net(cfg,
         encoder = Encoder(cfg)
         decoder = Decoder(cfg)
         refiner = Refiner(cfg)
-        merger = Merger(cfg)
 
         if torch.cuda.is_available():
             encoder = torch.nn.DataParallel(encoder).cuda()
             decoder = torch.nn.DataParallel(decoder).cuda()
             refiner = torch.nn.DataParallel(refiner).cuda()
-            merger = torch.nn.DataParallel(merger).cuda()
 
         print('[INFO] %s Loading weights from %s ...' % (dt.now(), cfg.CONST.WEIGHTS))
         checkpoint = torch.load(cfg.CONST.WEIGHTS)
@@ -81,8 +77,6 @@ def test_net(cfg,
 
         if cfg.NETWORK.USE_REFINER:
             refiner.load_state_dict(checkpoint['refiner_state_dict'])
-        if cfg.NETWORK.USE_MERGER:
-            merger.load_state_dict(checkpoint['merger_state_dict'])
 
     # Set up loss functions
     bce_loss = torch.nn.BCELoss()
@@ -97,7 +91,6 @@ def test_net(cfg,
     encoder.eval()
     decoder.eval()
     refiner.eval()
-    merger.eval()
 
     for sample_idx, (taxonomy_id, sample_name, rendering_images, ground_truth_volume) in enumerate(test_data_loader):
         taxonomy_id = taxonomy_id[0] if isinstance(taxonomy_id[0], str) else taxonomy_id[0].item()
@@ -108,14 +101,11 @@ def test_net(cfg,
             rendering_images = utils.network_utils.var_or_cuda(rendering_images)
             ground_truth_volume = utils.network_utils.var_or_cuda(ground_truth_volume)
 
-            # Test the encoder, decoder, refiner and merger
+            # Test the encoder, decoder, refiner
             image_features = encoder(rendering_images)
             raw_features, generated_volume = decoder(image_features)
 
-            if cfg.NETWORK.USE_MERGER and epoch_idx >= cfg.TRAIN.EPOCH_START_USE_MERGER:
-                generated_volume = merger(raw_features, generated_volume)
-            else:
-                generated_volume = torch.mean(generated_volume, dim=1)
+            generated_volume = torch.mean(generated_volume, dim=1)
             encoder_loss = bce_loss(generated_volume, ground_truth_volume) * 10
 
             if cfg.NETWORK.USE_REFINER and epoch_idx >= cfg.TRAIN.EPOCH_START_USE_REFINER:

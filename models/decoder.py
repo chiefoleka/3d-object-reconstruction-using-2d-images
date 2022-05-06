@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-#
-# Developed by Haozhe Xie <cshzxie@gmail.com>
-
 import torch
 
 
@@ -40,7 +36,6 @@ class Decoder(torch.nn.Module):
         image_features = image_features.permute(1, 0, 2, 3, 4).contiguous()
         image_features = torch.split(image_features, 1, dim=0)
         gen_volumes = []
-        raw_features = []
 
         for features in image_features:
             gen_volume = features.view(-1, 2048, 2, 2, 2)
@@ -52,18 +47,12 @@ class Decoder(torch.nn.Module):
             gen_volume = self.layer3(gen_volume)
             # print(gen_volume.size())   # torch.Size([batch_size, 32, 16, 16, 16])
             gen_volume = self.layer4(gen_volume)
-            raw_feature = gen_volume
             # print(gen_volume.size())   # torch.Size([batch_size, 8, 32, 32, 32])
             gen_volume = self.layer5(gen_volume)
             # print(gen_volume.size())   # torch.Size([batch_size, 1, 32, 32, 32])
-            raw_feature = torch.cat((raw_feature, gen_volume), dim=1)
-            # print(raw_feature.size())  # torch.Size([batch_size, 9, 32, 32, 32])
 
             gen_volumes.append(torch.squeeze(gen_volume, dim=1))
-            raw_features.append(raw_feature)
 
         gen_volumes = torch.stack(gen_volumes).permute(1, 0, 2, 3, 4).contiguous()
-        raw_features = torch.stack(raw_features).permute(1, 0, 2, 3, 4, 5).contiguous()
         # print(gen_volumes.size())      # torch.Size([batch_size, n_views, 32, 32, 32])
-        # print(raw_features.size())     # torch.Size([batch_size, n_views, 9, 32, 32, 32])
-        return raw_features, gen_volumes
+        return gen_volumes
