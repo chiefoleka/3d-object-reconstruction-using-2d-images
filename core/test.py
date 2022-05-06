@@ -34,7 +34,7 @@ def test_net(cfg,
 
     # Load taxonomies of dataset
     taxonomies = []
-    with open(cfg.DATASETS[cfg.DATASET.TEST_DATASET.upper()].TAXONOMY_FILE_PATH, encoding='utf-8') as file:
+    with open(cfg.DATASETS.SHAPENET.TAXONOMY_FILE_PATH, encoding='utf-8') as file:
         taxonomies = json.loads(file.read())
     taxonomies = {t['taxonomy_id']: t for t in taxonomies}
 
@@ -103,7 +103,7 @@ def test_net(cfg,
 
             # Test the encoder, decoder, refiner
             image_features = encoder(rendering_images)
-            raw_features, generated_volume = decoder(image_features)
+            generated_volume = decoder(image_features)
 
             generated_volume = torch.mean(generated_volume, dim=1)
             encoder_loss = bce_loss(generated_volume, ground_truth_volume) * 10
